@@ -18,13 +18,23 @@ To run this script, your system must meet the following requirements:
 
 ---
 
-## How It Works
+## How It Works & Methodology
 
+### 1. Determining Power Limits
+Before running the benchmark, the minimum and maximum power limits of the GPU were identified using `nvidia-smi` (typically by running `nvidia-smi -q -d POWER` to check the supported power limits). Based on these bounds, the `POWER_CAPS` array in the script was populated to test the GPU at **10W intervals** from the minimum to the maximum supported power cap.
+
+### 2. Model VRAM Lifecycle Management
+To ensure clean and isolated benchmarks, **only a single model should be tested at a time**. Ollama keeps loaded models in GPU VRAM after inference completes. Therefore, after testing a model, it is necessary to unload/stop the model to free up VRAM using the following command before running subsequent benchmarks:
+```bash
+ollama stop <MODEL_NAME>
+```
+
+### 3. Execution Pipeline
 The script executes the benchmark using the following steps:
 
 1. **Persistence Mode**: Enables persistence mode (`nvidia-smi -pm 1`) on the selected GPU to speed up power management state changes.
 2. **Model Warm-up**: Runs a single quick prompt (`"hello"`) to load the target model into the GPU memory before measurement starts.
-3. **Power Cap Iteration**: Iterates through a specified list of power limits (in Watts). For each power limit:
+3. **Power Cap Iteration**: Iterates through the specified list of power limits. For each power limit:
    - Sets the GPU power cap using `sudo nvidia-smi -i <GPU_ID> -pl <Power_Cap>`.
    - Pauses for 3 seconds to allow the power state to settle.
    - Runs a series of pre-configured benchmarking prompts sequentially.
@@ -48,8 +58,7 @@ MODELS = [
 ]
 
 # Power caps to test (in Watts)
-POWER_CAPS = [100, 110, 120, 130, 140, 150, 160, 170,
-              180, 190, 200, 210, 220, 230, 240, 250]
+POWER_CAPS = [30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130]
 
 # Prompts used for benchmarking
 PROMPTS = [
