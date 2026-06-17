@@ -6,8 +6,9 @@ import threading
 import sys
 
 # ==========================
-# CONFIGgit
+# CONFIGURATION
 # ==========================
+# Define models, power caps (in Watts), prompts, and directory paths.
 
 MODELS = [
     "llama3:8b"
@@ -123,9 +124,10 @@ RESULT_DIR = "results"
 os.makedirs(RESULT_DIR, exist_ok=True)
 
 # ==========================
-# GPU Selection (argument)
+# GPU Selection
 # ==========================
-
+# The script requires a target GPU ID as a command line argument (e.g., 0).
+# Changing GPU power caps requires root privileges, so this script must be run with sudo.
 if len(sys.argv) < 2:
     print("Usage: sudo python3 script.py <GPU_ID>")
     sys.exit(1)
@@ -139,6 +141,10 @@ print(f"\nUsing GPU {GPU_ID}")
 # ==========================
 
 def set_power_cap(power):
+    """
+    Sets the GPU power limit (cap) in Watts for the specified GPU using nvidia-smi.
+    Requires root (sudo) privileges to run.
+    """
     subprocess.run(
         ["sudo", "nvidia-smi", "-i", str(GPU_ID), "-pl", str(power)],
         check=True
@@ -146,6 +152,11 @@ def set_power_cap(power):
 
 
 def enable_persistence():
+    """
+    Enables GPU Persistence Mode.
+    This ensures that the driver remains loaded even when no applications are using
+    the GPU, speeding up nvidia-smi commands during power limit transitions.
+    """
     subprocess.run(
         ["sudo", "nvidia-smi", "-i", str(GPU_ID), "-pm", "1"],
         check=True
@@ -153,6 +164,10 @@ def enable_persistence():
 
 
 def get_power():
+    """
+    Queries the current power draw of the GPU in Watts.
+    Uses nvidia-smi to query 'power.draw' and returns it as a float.
+    """
     result = subprocess.run(
         [
             "nvidia-smi",
@@ -167,6 +182,10 @@ def get_power():
 
 
 def extract_eval_count(output_text):
+    """
+    Parses Ollama's verbose output to find the 'eval count' line, which
+    indicates the total number of tokens generated during inference.
+    """
     lines = output_text.splitlines()
     for line in lines:
         if line.strip().startswith("eval count:"):
@@ -176,24 +195,34 @@ def extract_eval_count(output_text):
 
 
 def run_prompt(model, prompt):
+    """
+    Executes a single prompt for a given model, and measures:
+    1. Total Energy (Joules) consumed using a background power-sampling thread.
+    2. Total Tokens generated.
+    3. Latency (seconds).
+    """
     total_energy = 0
     stop_sampling = False
 
+    # Define the background sampler that queries power draw at high frequency (SAMPLE_INTERVAL)
     def power_sampler():
         nonlocal total_energy
         while not stop_sampling:
             power = get_power()
-            total_energy += power * SAMPLE_INTERVAL
+            total_energy += power * SAMPLE_INTERVAL  # Energy = Power * Time
             time.sleep(SAMPLE_INTERVAL)
 
+    # Start the power-sampling thread
     sampler_thread = threading.Thread(target=power_sampler)
     sampler_thread.start()
 
+    # Configure CUDA device visibility for Ollama
     env = os.environ.copy()
     env["CUDA_VISIBLE_DEVICES"] = str(GPU_ID)
 
     start_time = time.time()
 
+    # Run the prompt with verbose output using the Ollama CLI
     result = subprocess.run(
         ["ollama", "run", "--verbose", model, prompt],
         stdout=subprocess.PIPE,
@@ -204,19 +233,33 @@ def run_prompt(model, prompt):
 
     latency = time.time() - start_time
 
+    # Stop and clean up the power-sampling thread
     stop_sampling = True
     sampler_thread.join()
 
+    # Extract number of tokens generated from verbose output
     tokens_generated = extract_eval_count(result.stdout)
 
     return total_energy, tokens_generated, latency
 
 
 def sanitize_model_name(model):
+    """
+    Helper function to sanitize model names (e.g. llama3:8b -> llama3_8b)
+    to make them safe for file system paths.
+    """
     return model.replace(":", "_").replace(".", "_")
 
 
 def run_model(model):
+    """
+    Benchmarks a single model across all configured GPU power limits:
+    1. Performs a model warm-up so it is fully loaded in VRAM.
+    2. Iterates over the specified power limits.
+    3. Runs the entire benchmark prompt suite under each power limit.
+    4. Computes latency, energy consumption, and energy efficiency (Joules/token).
+    5. Saves all statistics to a CSV file in the results directory.
+    """
     print(f"\n=== Running Model: {model} on GPU {GPU_ID} ===")
 
     csv_name = f"{sanitize_model_name(model)}_gpu{GPU_ID}.csv"
@@ -225,6 +268,8 @@ def run_model(model):
     env = os.environ.copy()
     env["CUDA_VISIBLE_DEVICES"] = str(GPU_ID)
 
+    # 1. Warm-up phase: guarantees the model is already in GPU VRAM
+    # to avoid caching/first-run latency distorting the results.
     print("Warming up model...")
     subprocess.run(
         ["ollama", "run", model, "hello"],
@@ -232,6 +277,7 @@ def run_model(model):
         env=env
     )
 
+    # Open target CSV file to record results
     with open(result_file, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow([
@@ -242,15 +288,17 @@ def run_model(model):
             "EnergyPerToken"
         ])
 
+        # 2. Iterate through each power limit level
         for power in POWER_CAPS:
             print(f"\nRunning power cap: {power}W")
             set_power_cap(power)
-            time.sleep(3)
+            time.sleep(3)  # Wait for the power cap transition to settle
 
             total_energy = 0
             total_tokens = 0
             total_latency = 0
 
+            # 3. Run each test prompt under the current power cap
             for prompt in PROMPTS:
                 energy, tokens, latency = run_prompt(model, prompt)
 
@@ -260,10 +308,12 @@ def run_model(model):
 
                 print(f"Prompt done | Tokens: {tokens} | Energy: {energy:.2f}J")
 
+            # Calculate average Energy per Token (J/Token)
             energy_per_token = (
                 total_energy / total_tokens if total_tokens > 0 else 0
             )
 
+            # Log current power cap metrics
             writer.writerow([
                 power,
                 total_latency,
@@ -280,6 +330,11 @@ def run_model(model):
 
 
 def main():
+    """
+    Main script execution flow.
+    Enables Persistence Mode on the selected GPU, then runs benchmarks
+    for all configured models.
+    """
     enable_persistence()
 
     for model in MODELS:
