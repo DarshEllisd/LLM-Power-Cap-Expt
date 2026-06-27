@@ -259,6 +259,7 @@ def run_model(model):
     3. Runs the entire benchmark prompt suite under each power limit.
     4. Computes latency, energy consumption, and energy efficiency (Joules/token).
     5. Saves all statistics to a CSV file in the results directory.
+    6. Unloads/stops the model from GPU VRAM to ensure clean isolation.
     """
     print(f"\n=== Running Model: {model} on GPU {GPU_ID} ===")
 
@@ -327,6 +328,15 @@ def run_model(model):
             print(f"Energy/Token: {energy_per_token:.4f}")
 
     print(f"\nFinished model {model}. Results saved to {result_file}")
+
+    # 4. Cleanup phase: stop/unload the model from GPU VRAM to ensure it is not kept
+    # loaded in memory during subsequent model benchmarks.
+    print(f"Stopping model {model} to free VRAM...")
+    subprocess.run(
+        ["ollama", "stop", model],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE
+    )
 
 
 def main():
