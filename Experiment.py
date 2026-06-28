@@ -11,10 +11,11 @@ import sys
 # Define models, power caps (in Watts), prompts, and directory paths.
 
 MODELS = [
-    "llama3:8b"
+    "qwen2.5:3b", "phi3-8k:latest", "granite4:3b", "gemma3:4b"
 ]
 
 POWER_CAPS = [30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130]
+
 
 PROMPTS = [
     "Explain gradient descent from first principles and derive its update rule mathematically.",
@@ -66,57 +67,7 @@ PROMPTS = [
     "Compare forward-mode and reverse-mode autodiff.",
     "Design a distributed training architecture for large-scale models.",
     "Explain data parallelism vs model parallelism.",
-    "Analyze bottlenecks in GPU-accelerated training.",
-    "Implement a memory allocator and explain fragmentation issues.",
-    "Explain how a compiler converts high-level code into machine code.",
-    "Compare interpreted and compiled languages at runtime level.",
-    "Implement a simple virtual machine.",
-    "Explain garbage collection algorithms like mark-sweep and generational GC.",
-    "Analyze deadlocks and implement a deadlock detection algorithm.",
-    "Explain scheduling algorithms in operating systems.",
-    "Implement a thread-safe queue.",
-    "Compare mutexes, semaphores, and monitors.",
-    "Explain how context switching works internally.",
-    "Implement a TCP-like reliable protocol over UDP.",
-    "Explain how consensus algorithms like Raft work.",
-    "Compare Paxos and Raft.",
-    "Design a distributed key-value store.",
-    "Explain CAP theorem with practical examples.",
-    "Implement consistent hashing.",
-    "Explain how load balancing algorithms work.",
-    "Compare SQL and NoSQL from a systems perspective.",
-    "Design a scalable microservices architecture.",
-    "Explain eventual consistency in distributed systems.",
-    "Implement RSA encryption from scratch.",
-    "Explain elliptic curve cryptography mathematically.",
-    "Compare symmetric and asymmetric cryptography.",
-    "Explain how hashing functions like SHA-256 work.",
-    "Implement a Merkle tree.",
-    "Analyze blockchain consensus mechanisms.",
-    "Explain zero-knowledge proofs at a conceptual level.",
-    "Compare proof-of-work and proof-of-stake.",
-    "Implement a simple blockchain prototype.",
-    "Analyze vulnerabilities in smart contracts.",
-    "Implement depth-first search and breadth-first search.",
-    "Compare Dijkstra and A* algorithms.",
-    "Implement a Trie and analyze its complexity.",
-    "Derive the time complexity of dynamic programming solutions.",
-    "Explain memoization vs tabulation.",
-    "Implement the KMP string matching algorithm.",
-    "Analyze suffix arrays and suffix trees.",
-    "Implement a red-black tree.",
-    "Compare B-trees and AVL trees.",
-    "Analyze amortized complexity with examples.",
-    "Implement gradient clipping and explain why it stabilizes training.",
-    "Compare Adam, RMSProp, and SGD with momentum.",
-    "Derive the Adam optimizer update rule mathematically.",
-    "Explain learning rate scheduling strategies.",
-    "Implement a custom optimizer from scratch.",
-    "Analyze overfitting and implement early stopping.",
-    "Compare cross-validation techniques.",
-    "Design an experiment to evaluate a neural network rigorously.",
-    "Explain scaling laws in large language models.",
-    "Propose a novel improvement to transformer efficiency and justify it technically."
+    "Analyze bottlenecks in GPU-accelerated training."
 ]
 
 SAMPLE_INTERVAL = 0.1
@@ -251,20 +202,77 @@ def sanitize_model_name(model):
     return model.replace(":", "_").replace(".", "_")
 
 
+def is_model_running(model):
+    """
+    Checks whether the given model is currently loaded in Ollama by
+    parsing the output of 'ollama ps'.
+    Returns True if the model appears in the running process list.
+    """
+    try:
+        result = subprocess.run(
+            ["ollama", "ps"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        # Each line after the header lists a running model name in the first column
+        for line in result.stdout.strip().splitlines()[1:]:
+            if line.strip().startswith(model):
+                return True
+    except Exception:
+        pass
+    return False
+
+
+def stop_model(model, max_retries=8):
+    """
+    Attempts to stop/unload the model from GPU VRAM.
+    Retries up to max_retries times, verifying via 'ollama ps' after each attempt.
+    Returns True if successfully stopped, False if all retries exhausted.
+    """
+    for attempt in range(1, max_retries + 1):
+        subprocess.run(
+            ["ollama", "stop", model],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        time.sleep(2)  # Give Ollama a moment to release resources
+
+        if not is_model_running(model):
+            print(f"Model {model} stopped successfully (attempt {attempt}).")
+            return True
+
+        print(f"Model {model} still running after attempt {attempt}/{max_retries}, retrying...")
+
+    print(f"ERROR: Failed to stop model {model} after {max_retries} attempts.")
+    return False
+
+
 def run_model(model):
     """
     Benchmarks a single model across all configured GPU power limits:
     1. Performs a model warm-up so it is fully loaded in VRAM.
     2. Iterates over the specified power limits.
     3. Runs the entire benchmark prompt suite under each power limit.
-    4. Computes latency, energy consumption, and energy efficiency (Joules/token).
-    5. Saves all statistics to a CSV file in the results directory.
+    4. Saves per-prompt data to perprompt_{power}W.csv in the model directory.
+    5. Saves aggregated summary to summary.csv in the model directory.
     6. Unloads/stops the model from GPU VRAM to ensure clean isolation.
+
+    Output structure:
+        results/<model_name>/
+            perprompt_30W.csv    # Per-prompt data for 30W cap
+            perprompt_40W.csv    # Per-prompt data for 40W cap
+            ...
+            summary.csv          # Aggregated summary across all power caps
     """
     print(f"\n=== Running Model: {model} on GPU {GPU_ID} ===")
 
-    csv_name = f"{sanitize_model_name(model)}_gpu{GPU_ID}.csv"
-    result_file = os.path.join(RESULT_DIR, csv_name)
+    # Create a model-specific output directory
+    model_dir_name = f"{sanitize_model_name(model)}_gpu{GPU_ID}"
+    model_dir = os.path.join(RESULT_DIR, model_dir_name)
+    os.makedirs(model_dir, exist_ok=True)
+
+    summary_file = os.path.join(model_dir, "summary.csv")
 
     env = os.environ.copy()
     env["CUDA_VISIBLE_DEVICES"] = str(GPU_ID)
@@ -278,10 +286,10 @@ def run_model(model):
         env=env
     )
 
-    # Open target CSV file to record results
-    with open(result_file, "w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow([
+    # Open the summary CSV file to record aggregated results
+    with open(summary_file, "w", newline="") as summary_f:
+        summary_writer = csv.writer(summary_f)
+        summary_writer.writerow([
             "PowerCap(W)",
             "TotalLatency(s)",
             "TotalEnergy(J)",
@@ -299,23 +307,62 @@ def run_model(model):
             total_tokens = 0
             total_latency = 0
 
+            # Collect per-prompt results for this power cap
+            per_prompt_results = []
+
             # 3. Run each test prompt under the current power cap
-            for prompt in PROMPTS:
+            for i, prompt in enumerate(PROMPTS, start=1):
                 energy, tokens, latency = run_prompt(model, prompt)
 
                 total_energy += energy
                 total_tokens += tokens
                 total_latency += latency
 
-                print(f"Prompt done | Tokens: {tokens} | Energy: {energy:.2f}J")
+                # Calculate per-prompt energy efficiency
+                prompt_energy_per_token = (
+                    energy / tokens if tokens > 0 else 0
+                )
 
-            # Calculate average Energy per Token (J/Token)
+                per_prompt_results.append({
+                    "prompt_index": i,
+                    "prompt": prompt,
+                    "latency": latency,
+                    "energy": energy,
+                    "tokens": tokens,
+                    "energy_per_token": prompt_energy_per_token,
+                })
+
+                print(f"Prompt {i}/{len(PROMPTS)} done | Tokens: {tokens} | Energy: {energy:.2f}J")
+
+            # 4. Write per-prompt CSV for this power cap
+            perprompt_file = os.path.join(model_dir, f"perprompt_{power}W.csv")
+            with open(perprompt_file, "w", newline="") as pp_f:
+                pp_writer = csv.writer(pp_f)
+                pp_writer.writerow([
+                    "PromptIndex",
+                    "Latency(s)",
+                    "Energy(J)",
+                    "Tokens",
+                    "EnergyPerToken"
+                ])
+                for row in per_prompt_results:
+                    pp_writer.writerow([
+                        row["prompt_index"],
+                        row["latency"],
+                        row["energy"],
+                        row["tokens"],
+                        row["energy_per_token"],
+                    ])
+
+            print(f"  Per-prompt data saved to {perprompt_file}")
+
+            # Calculate average Energy per Token (J/Token) for summary
             energy_per_token = (
                 total_energy / total_tokens if total_tokens > 0 else 0
             )
 
-            # Log current power cap metrics
-            writer.writerow([
+            # 5. Log aggregated power cap metrics to summary CSV
+            summary_writer.writerow([
                 power,
                 total_latency,
                 total_energy,
@@ -327,16 +374,23 @@ def run_model(model):
             print(f"Total Tokens: {total_tokens}")
             print(f"Energy/Token: {energy_per_token:.4f}")
 
-    print(f"\nFinished model {model}. Results saved to {result_file}")
+    print(f"\nFinished model {model}. Results saved to {model_dir}/")
 
-    # 4. Cleanup phase: stop/unload the model from GPU VRAM to ensure it is not kept
+    # Write a reference file listing all prompts used in the experiment
+    prompts_file = os.path.join(model_dir, "prompts.csv")
+    with open(prompts_file, "w", newline="") as pf:
+        prompts_writer = csv.writer(pf)
+        prompts_writer.writerow(["PromptIndex", "Prompt"])
+        for i, prompt in enumerate(PROMPTS, start=1):
+            prompts_writer.writerow([i, prompt])
+    print(f"Prompts list saved to {prompts_file}")
+
+    # 6. Cleanup phase: stop/unload the model from GPU VRAM to ensure it is not kept
     # loaded in memory during subsequent model benchmarks.
     print(f"Stopping model {model} to free VRAM...")
-    subprocess.run(
-        ["ollama", "stop", model],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE
-    )
+    if not stop_model(model):
+        print(f"ABORTING: Could not stop model {model}. All data collected so far has been saved to {model_dir}/")
+        sys.exit(1)
 
 
 def main():
