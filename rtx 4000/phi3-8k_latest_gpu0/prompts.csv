@@ -1,0 +1,51 @@
+PromptIndex,Prompt
+1,Explain gradient descent from first principles and derive its update rule mathematically.
+2,"Compare batch, stochastic, and mini-batch gradient descent with convergence analysis."
+3,Implement gradient descent in Python and visualize its convergence on a convex function.
+4,Derive the backpropagation algorithm step-by-step for a multilayer perceptron.
+5,Explain vanishing and exploding gradients and propose mitigation strategies.
+6,Implement quicksort and analyze its average and worst-case time complexity.
+7,"Compare quicksort, mergesort, and heapsort in terms of space and stability."
+8,Prove why quicksort has expected O(n log n) complexity.
+9,Implement a neural network from scratch without using deep learning libraries.
+10,Explain the bias-variance tradeoff with mathematical intuition.
+11,Derive the closed-form solution for linear regression using normal equations.
+12,Implement logistic regression using gradient descent from scratch.
+13,Compare L1 and L2 regularization and show their geometric interpretations.
+14,Explain the mathematical intuition behind support vector machines.
+15,Derive the kernel trick and provide practical examples.
+16,Implement a decision tree using information gain and entropy.
+17,Compare entropy and Gini impurity for classification tasks.
+18,Build a random forest and explain how bagging reduces variance.
+19,Explain boosting and derive the AdaBoost algorithm.
+20,Compare gradient boosting with XGBoost at the algorithmic level.
+21,Derive the Bellman equation in reinforcement learning.
+22,Implement Q-learning from scratch for a grid-world problem.
+23,Compare policy gradient methods with value-based methods.
+24,Explain actor-critic architecture with mathematical formulation.
+25,Implement Deep Q-Network and explain experience replay.
+26,Explain the exploration-exploitation tradeoff and epsilon-greedy strategy.
+27,Compare model-based and model-free reinforcement learning.
+28,Derive the update rules for Proximal Policy Optimization.
+29,Explain temporal difference learning with equations.
+30,Analyze convergence guarantees in reinforcement learning.
+31,Explain convolution operations in CNNs with mathematical formulation.
+32,Implement a convolutional layer from scratch in NumPy.
+33,Compare CNNs and Vision Transformers for image classification.
+34,Derive self-attention from first principles.
+35,Explain multi-head attention and its computational complexity.
+36,Derive the transformer architecture mathematically.
+37,"Compare RNNs, LSTMs, and GRUs at the architectural level."
+38,Explain why LSTMs mitigate vanishing gradients.
+39,Implement backpropagation through time.
+40,Analyze the computational complexity of transformer models.
+41,Explain how dropout acts as regularization mathematically.
+42,Compare batch normalization and layer normalization.
+43,Derive the softmax function and its gradient.
+44,Explain cross-entropy loss and its relation to KL divergence.
+45,Implement a custom loss function and compute gradients manually.
+46,Explain how automatic differentiation works internally.
+47,Compare forward-mode and reverse-mode autodiff.
+48,Design a distributed training architecture for large-scale models.
+49,Explain data parallelism vs model parallelism.
+50,Analyze bottlenecks in GPU-accelerated training.
