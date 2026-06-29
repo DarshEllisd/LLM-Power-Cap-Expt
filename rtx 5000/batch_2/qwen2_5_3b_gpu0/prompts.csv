@@ -1,0 +1,51 @@
+PromptIndex,Prompt
+1,Implement a memory allocator and explain fragmentation issues.
+2,Explain how a compiler converts high-level code into machine code.
+3,Compare interpreted and compiled languages at runtime level.
+4,Implement a simple virtual machine.
+5,Explain garbage collection algorithms like mark-sweep and generational GC.
+6,Analyze deadlocks and implement a deadlock detection algorithm.
+7,Explain scheduling algorithms in operating systems.
+8,Implement a thread-safe queue.
+9,"Compare mutexes, semaphores, and monitors."
+10,Explain how context switching works internally.
+11,Implement a TCP-like reliable protocol over UDP.
+12,Explain how consensus algorithms like Raft work.
+13,Compare Paxos and Raft.
+14,Design a distributed key-value store.
+15,Explain CAP theorem with practical examples.
+16,Implement consistent hashing.
+17,Explain how load balancing algorithms work.
+18,Compare SQL and NoSQL from a systems perspective.
+19,Design a scalable microservices architecture.
+20,Explain eventual consistency in distributed systems.
+21,Implement RSA encryption from scratch.
+22,Explain elliptic curve cryptography mathematically.
+23,Compare symmetric and asymmetric cryptography.
+24,Explain how hashing functions like SHA-256 work.
+25,Implement a Merkle tree.
+26,Analyze blockchain consensus mechanisms.
+27,Explain zero-knowledge proofs at a conceptual level.
+28,Compare proof-of-work and proof-of-stake.
+29,Implement a simple blockchain prototype.
+30,Analyze vulnerabilities in smart contracts.
+31,Implement depth-first search and breadth-first search.
+32,Compare Dijkstra and A* algorithms.
+33,Implement a Trie and analyze its complexity.
+34,Derive the time complexity of dynamic programming solutions.
+35,Explain memoization vs tabulation.
+36,Implement the KMP string matching algorithm.
+37,Analyze suffix arrays and suffix trees.
+38,Implement a red-black tree.
+39,Compare B-trees and AVL trees.
+40,Analyze amortized complexity with examples.
+41,Implement gradient clipping and explain why it stabilizes training.
+42,"Compare Adam, RMSProp, and SGD with momentum."
+43,Derive the Adam optimizer update rule mathematically.
+44,Explain learning rate scheduling strategies.
+45,Implement a custom optimizer from scratch.
+46,Analyze overfitting and implement early stopping.
+47,Compare cross-validation techniques.
+48,Design an experiment to evaluate a neural network rigorously.
+49,Explain scaling laws in large language models.
+50,Propose a novel improvement to transformer efficiency and justify it technically.
