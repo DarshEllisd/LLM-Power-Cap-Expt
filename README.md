@@ -24,10 +24,7 @@ To run this script, your system must meet the following requirements:
 Before running the benchmark, the minimum and maximum power limits of the GPU were identified using `nvidia-smi` (typically by running `nvidia-smi -q -d POWER` to check the supported power limits). Based on these bounds, the `POWER_CAPS` array in the script was populated to test the GPU at **10W intervals** from the minimum to the maximum supported power cap.
 
 ### 2. Model VRAM Lifecycle Management
-To ensure clean and isolated benchmarks, **only a single model should be tested at a time**. Ollama keeps loaded models in GPU VRAM after inference completes. Therefore, after testing a model, it is necessary to unload/stop the model to free up VRAM using the following command before running subsequent benchmarks:
-```bash
-ollama stop <MODEL_NAME>
-```
+To ensure clean and isolated benchmarks, **only a single model should be tested at a time**. Ollama keeps loaded models in GPU VRAM after inference completes. After testing each model, the script automatically unloads it from VRAM using `ollama stop`. The script verifies the model has actually stopped by checking `ollama ps`, retrying up to **8 times** before aborting. If the model cannot be stopped, the script exits gracefully, preserving all data collected so far.
 
 ### 3. Execution Pipeline
 The script executes the benchmark using the following steps:
@@ -43,7 +40,8 @@ The script executes the benchmark using the following steps:
    - Computes total energy consumed (integral of power draw over prompt duration).
    - Extracts the exact number of tokens generated from Ollama's verbose evaluation statistics (`eval count`).
    - Calculates the average **Energy per Token** (Total Joules / Total Tokens).
-6. **Data Output**: Stores the aggregated results for each power cap into a CSV file.
+6. **Data Output**: Stores per-prompt results and aggregated summary into CSV files within a model-specific directory.
+7. **Model Cleanup**: Verifies and stops the model from GPU VRAM with retry logic (up to 8 attempts) before proceeding to the next model.
 
 ---
 
@@ -54,13 +52,13 @@ You can customize the benchmark directly in the `Experiment.py` script by modify
 ```python
 # Models to benchmark (Make sure these are pre-pulled in Ollama)
 MODELS = [
-    "llama3:8b",
+    "qwen2.5:3b", "phi3-8k:latest", "granite4:3b", "gemma3:4b"
 ]
 
 # Power caps to test (in Watts)
 POWER_CAPS = [30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130]
 
-# Prompts used for benchmarking
+# Prompts used for benchmarking (50 prompts covering ML, systems, crypto, algorithms)
 PROMPTS = [
     "Explain gradient descent from first principles and derive its update rule mathematically.",
     ...
@@ -91,11 +89,36 @@ sudo python3 Experiment.py 0
 
 ---
 
-## Output CSV Structure
+## Output Structure
 
-Results are saved inside the `results/` directory with the naming convention `{model_name}_gpu{GPU_ID}.csv` (e.g., `results/llama3_8b_gpu0.csv`).
+Results are saved inside a **model-specific subdirectory** under `results/`:
 
-The CSV contains the following columns for each tested power limit:
+```
+results/
+└── <model_name>_gpu<GPU_ID>/
+    ├── perprompt_30W.csv        # Per-prompt data at 30W power cap
+    ├── perprompt_40W.csv        # Per-prompt data at 40W power cap
+    ├── ...
+    ├── perprompt_<max>W.csv     # Per-prompt data at max power cap
+    ├── summary.csv              # Aggregated summary across all power caps
+    └── prompts.csv              # Reference list of all prompts used
+```
+
+### Per-Prompt CSV (`perprompt_{power}W.csv`)
+
+Contains one row per prompt for a given power cap:
+
+| Column | Description |
+| :--- | :--- |
+| **PromptIndex** | The 1-based index of the prompt. |
+| **Latency(s)** | Time taken to complete this prompt (seconds). |
+| **Energy(J)** | Energy consumed by the GPU during this prompt (Joules). |
+| **Tokens** | Number of tokens generated for this prompt. |
+| **EnergyPerToken** | Energy efficiency for this prompt (Joules/token). |
+
+### Summary CSV (`summary.csv`)
+
+Contains one row per power cap, aggregated across all prompts:
 
 | Column | Description |
 | :--- | :--- |
@@ -104,3 +127,42 @@ The CSV contains the following columns for each tested power limit:
 | **TotalEnergy(J)** | The total energy consumed by the GPU during the run (Joules). |
 | **TotalTokens** | The sum of all tokens generated across all test prompts. |
 | **EnergyPerToken** | Average energy required to generate a single token (Joules/token). |
+
+### Prompts CSV (`prompts.csv`)
+
+A reference file listing all prompts used in the experiment:
+
+| Column | Description |
+| :--- | :--- |
+| **PromptIndex** | The 1-based index of the prompt. |
+| **Prompt** | The full prompt text. |
+
+---
+
+## Repository Directory Structure
+
+Collected experiment data is organized by GPU and batch:
+
+```
+├── Experiment.py                    # Benchmarking script
+├── README.md
+├── rtx 4000/                        # NVIDIA RTX 4000 results
+│   ├── batch_1/                     # First batch of per-prompt data
+│   │   ├── gemma3_4b_gpu0/
+│   │   ├── granite4_3b_gpu0/
+│   │   ├── phi3-8k_latest_gpu0/
+│   │   └── qwen2_5_3b_gpu0/
+│   ├── batch_2/                     # Second batch of per-prompt data
+│   │   └── ...
+│   └── *.csv                        # Legacy summary-only CSVs
+├── rtx 5000/                        # NVIDIA RTX 5000 results
+│   ├── batch_1/
+│   ├── batch_2/
+│   └── *.csv
+└── rtx 6000/                        # NVIDIA RTX 6000 results
+    ├── batch_1/
+    ├── batch_2/
+    └── *.csv
+```
+
+Each `batch_*/` directory contains model subdirectories (e.g., `qwen2_5_3b_gpu0/`) with the full per-prompt CSV files, summary CSV, and prompts reference file.
